@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Logs and build output
+*.log
+dist/
+build/
+
+# Editor and OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch
+*.tmp
+*.bak

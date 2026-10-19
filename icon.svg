@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Restart">
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1f2937"/>
+  <g fill="none" stroke="#f9fafb" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50 32a18 18 0 1 1-5.3-12.7"/>
+    <path d="M50 12v10h-10"/>
+  </g>
+</svg>
