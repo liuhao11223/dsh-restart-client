@@ -4,8 +4,7 @@ A DSH (DeepSeek Harness) plugin that adds a **one-click restart** for the deskto
 
 Click once. No confirmation dialog, no second press, no console window.
 
-<!-- 截图占位：把下面的路径替换成仓库里的真实截图 -->
-![The restart button at the sidebar foot](docs/screenshot.png)
+![The restart button at the foot of the sidebar](docs/screenshot.png)
 
 ## Why
 
