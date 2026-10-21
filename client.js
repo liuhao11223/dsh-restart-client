@@ -1,15 +1,19 @@
 /**
  * Client half of dsh-restart-client.
  *
- * One icon-only control pinned at the top-right corner of the page.
+ * One icon-only control at the top-right of the page, placed just LEFT of the
+ * conversation header's own button cluster so it never overlaps them.
  * A single click asks the Host half to restart the client: no arm step, no confirmation dialog.
  *
  * Seat choice:
  * - `shell.overlay` is the shell's frame-wide floating layer (`.overlayLayer`, z-index 20,
  *   `position: absolute; inset: 0`, `pointer-events: none` with `> * { pointer-events: auto }`),
  *   so an entry here floats above every column and can pin itself to any viewport corner.
- * - The anchor uses `position: fixed; top: 8px; right: 12px;` — the same language as the shell's
- *   own chrome controls — with `no-drag` so a click restarts instead of starting a window drag.
+ * - The anchor uses `position: fixed` with `no-drag` so a click restarts instead of dragging.
+ * - The page's top-right corner is occupied by the conversation header toolbar
+ *   (open-right-sidebar, context diagnostics, bottom panel, more-actions, …), so the icon
+ *   measures that cluster at runtime and docks to its LEFT edge. When no header buttons
+ *   exist (blank page, exotic build) it falls back to the corner itself.
  * - The button is icon-only (no text label); the tooltip carries the accessible name.
  */
 window.__ModuleLoader__.load({
@@ -28,6 +32,14 @@ window.__ModuleLoader__.load({
     const SELF_RELOAD_MS = 15000;
     // How long a failure face stays before the icon resets to its idle face.
     const ERROR_RESET_MS = 6000;
+    // Vertical band (CSS px from the viewport top) that counts as the "header row".
+    const HEADER_STRIP = 60;
+    // Only buttons in the right 45% of the viewport are treated as the header cluster.
+    const RIGHT_ZONE = 0.55;
+    // Gap between our icon and the leftmost header button.
+    const CLUSTER_GAP = 8;
+    // Icon size (CSS px); used to convert a measured left edge into a `right` offset.
+    const ICON_SIZE = 28;
 
     const zh = {
       action: '重启客户端',
@@ -48,6 +60,25 @@ window.__ModuleLoader__.load({
       return (key) => (dict[key] !== undefined ? dict[key] : key);
     }
 
+    /**
+     * The left edge (CSS px) of the conversation header's right-side button cluster, or null
+     * when the page has no such cluster. Our icon docks to the left of this value.
+     */
+    function measureHeaderCluster() {
+      if (typeof document === 'undefined' || typeof document.querySelectorAll !== 'function') return null;
+      const zone = window.innerWidth * RIGHT_ZONE;
+      let minLeft = null;
+      const nodes = document.querySelectorAll('button, [role="button"]');
+      for (let i = 0; i < nodes.length; i += 1) {
+        const rect = nodes[i].getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        if (rect.bottom <= 0 || rect.top > HEADER_STRIP) continue;
+        if (rect.left < zone) continue;
+        if (minLeft === null || rect.left < minLeft) minLeft = rect.left;
+      }
+      return minLeft;
+    }
+
     const CSS = `
 .dshc-anchor {
   position: fixed;
@@ -66,8 +97,8 @@ window.__ModuleLoader__.load({
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: ${ICON_SIZE}px;
+  height: ${ICON_SIZE}px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -161,9 +192,43 @@ window.__ModuleLoader__.load({
 
       const [state, setState] = useState('idle');
       const [detail, setDetail] = useState('');
+      const [offset, setOffset] = useState(null);
       const reloadTimer = useRef(null);
       const resetTimer = useRef(null);
       const running = useRef(false);
+
+      // Dock left of the header button cluster; re-measure on resize and layout changes.
+      useEffect(() => {
+        let frame = 0;
+        const sync = () => {
+          frame = 0;
+          const clusterLeft = measureHeaderCluster();
+          if (clusterLeft === null) {
+            setOffset((previous) => (previous === null ? previous : null));
+            return;
+          }
+          const next = Math.round(window.innerWidth - clusterLeft + CLUSTER_GAP);
+          setOffset((previous) => (previous === next ? previous : next));
+        };
+        const schedule = () => {
+          if (frame !== 0) return;
+          frame = requestAnimationFrame(sync);
+        };
+        sync();
+        window.addEventListener('resize', schedule);
+        let observer = null;
+        if (typeof MutationObserver === 'function') {
+          observer = new MutationObserver(schedule);
+          observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] });
+        }
+        const tick = setInterval(schedule, 2000);
+        return () => {
+          if (frame !== 0) cancelAnimationFrame(frame);
+          window.removeEventListener('resize', schedule);
+          if (observer !== null) observer.disconnect();
+          clearInterval(tick);
+        };
+      }, []);
 
       useEffect(
         () => () => {
@@ -224,10 +289,11 @@ window.__ModuleLoader__.load({
 
       const busy = state === 'busy';
       const title = detail !== '' ? `${t('action')} - ${detail}` : t('action');
+      const style = offset === null ? undefined : { right: `${offset}px` };
 
       return h(
         'div',
-        { className: 'dshc-anchor' },
+        { className: 'dshc-anchor', style },
         h('style', { key: 'style' }, CSS),
         h(
           'button',
