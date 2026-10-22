@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Restart DSH Client",
-    "description": "Adds a one-click restart button beside the sidebar settings, an HTTP endpoint and an agent tool that restart the desktop client."
+    "description": "Adds a one-click restart button in the conversation header on session pages and the caption top-right on the home page (never displacing existing icons), an HTTP endpoint and an agent tool that restart the desktop client."
   }
 }

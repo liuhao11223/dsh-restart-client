@@ -1,10 +1,10 @@
 # dsh-restart-client
 
-A DSH (DeepSeek Harness) plugin that adds a **one-click restart** for the desktop client — a sidebar button, an HTTP endpoint, and an agent tool, all backed by the same host capability.
+A DSH (DeepSeek Harness) plugin that adds a **one-click restart** for the desktop client — a header/caption button, an HTTP endpoint, and an agent tool, all backed by the same host capability.
 
 Click once. No confirmation dialog, no second press, no console window.
 
-![The restart button at the foot of the sidebar](docs/screenshot.png)
+![The restart button in the conversation header and caption corner](docs/screenshot.png)
 
 ## Why
 
@@ -14,7 +14,7 @@ The DSH desktop app ships restart only as an official **service-only** extension
 
 | Entry point | Kind | Purpose |
 | --- | --- | --- |
-| Sidebar footer button | Client slot `sidebar.footer.action` | One click → the desktop app restarts |
+| Restart button | Client slots `conversation.session.header.utilities` (session pages) + `shell.overlay` (home page) — never displaces the panel toggle | One click → the desktop app restarts |
 | `POST /api/dsh-restart/restart` | HTTP route | Same operation for scripts and other plugins |
 | `GET /api/dsh-restart/status` | HTTP route | Reports the resolved desktop process and mode plan |
 | `restart_dsh_client` | Agent tool | Lets the model restart the client itself |
@@ -65,9 +65,9 @@ If WSH is unavailable, the plugin falls back to creating the helper directly, so
 
 ## The button
 
-It lives in the shell's own `sidebar.footer.action` list slot, next to Settings, and inherits the sidebar's layout — including the centering it does when the sidebar collapses to a rail. Nothing is measured at runtime and no coordinates are hard-coded.
+It is registered in two host seats so it is always reachable, and the two never show at once. On session pages — including the blank new-session (hero) page — it lives in the conversation header utilities slot (`conversation.session.header.utilities`), just left of the header corner, in the content area below the titlebar, so it never overlaps the OS-native minimize/maximize/close buttons. On the home page (no session at all) it lives in the frame-wide `shell.overlay` layer, pinned to the right end of the home page's header row (below the titlebar) — the same visual corner as the header seat. The overlay seat hides itself (CSS `:has()` plus a DOM probe) whenever the conversation panel is not mounted (plugins / schedule / settings pages) or the header seat is rendered, so it appears only on the home page and never duplicates. The right-panel expand toggle lives in a separate, single-occupant corner slot, so it is never displaced.
 
-Styled as a ghost button in the shell's token language: 28px tall, 6px radius, transparent until hover, `--dsw-alias-label-secondary` → `--dsw-alias-label-primary`, a 180° icon turn on hover, a spin plus a pulsing label while busy, and `--dsw-alias-state-error-primary` with a **Retry** face for six seconds if the request fails. It honors `prefers-reduced-motion`.
+Styled as a ghost button in the shell's token language: 28px square, compact control radius, transparent until hover, `--dsw-alias-label-secondary` → `--dsw-alias-label-primary`, a 180° icon turn on hover, a spin plus a pulsing label while busy, and `--dsw-alias-state-error-primary` with a **Retry** face for six seconds if the request fails. It honors `prefers-reduced-motion`.
 
 ## API
 
@@ -115,7 +115,7 @@ The current turn is interrupted by a real restart.
 
 ```
 index.js            host half — routes, WMI/VBS launcher, agent tool
-client.js           client half — the sidebar button
+client.js           client half — the caption corner button
 cordis.patch.yml    bundle patch: inserts the plugin entry
 locale/zh.json      plugin marketplace metadata (Chinese)
 locale/en.json      plugin marketplace metadata (English)

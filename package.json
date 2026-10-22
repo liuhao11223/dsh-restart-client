@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "One-click restart for the DSH desktop client: a sidebar button, an HTTP endpoint and an agent tool that restart the whole app.",
+  "description": "One-click restart for the DSH desktop client: a header/caption button, an HTTP endpoint and an agent tool that restart the whole app.",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
