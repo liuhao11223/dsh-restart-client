@@ -23,7 +23,15 @@ export const inject = ['webServer', 'connection', 'tools'];
 
 const STATUS_PATH = '/api/dsh-restart/status';
 const RESTART_PATH = '/api/dsh-restart/restart';
-const DESKTOP_PATTERN = /deepseek-harness-desktop/i;
+// Match both the upstream executable name (deepseek-harness-desktop) and the
+// localized desktop shipped here, whose process is literally "DSH Desktop.exe".
+// Without the second alternative findDesktop() misses the shell, so every
+// client restart silently degrades to a service restart: the replacement
+// harness it spawns becomes an orphan (its parent exits), while the desktop
+// watchdog relaunches its own harness. The two then fight over ports 43129 and
+// 8326 (EADDRINUSE), and the failed boots feed the "plugin recovery detection:
+// unresolved" cascade that lands the app in safe mode.
+const DESKTOP_PATTERN = /deepseek-harness-desktop|dsh[\s_-]*desktop/i;
 const MODES = ['client', 'service'];
 
 /* ------------------------------------------------------------------ utilities */

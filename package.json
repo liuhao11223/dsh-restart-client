@@ -3,7 +3,27 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "One-click restart for the DSH desktop client: a header/caption button, an HTTP endpoint and an agent tool that restart the whole app.",
+  "description": "One-click restart for the DSH desktop client: a header corner button, an HTTP endpoint and an agent tool that restart the whole app.",
+  "author": "liuhao11223",
+  "license": "MIT",
+  "homepage": "https://github.com/liuhao11223/dsh-restart-client#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/liuhao11223/dsh-restart-client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/liuhao11223/dsh-restart-client/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "restart",
+    "desktop"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -15,7 +35,9 @@
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
-    "icon.svg"
+    "icon.svg",
+    "README.md",
+    "LICENSE"
   ],
   "dsh": {
     "bundle": {

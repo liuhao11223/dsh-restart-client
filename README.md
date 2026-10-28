@@ -1,10 +1,8 @@
 # dsh-restart-client
 
-A DSH (DeepSeek Harness) plugin that adds a **one-click restart** for the desktop client — a header/caption button, an HTTP endpoint, and an agent tool, all backed by the same host capability.
+A DSH (DeepSeek Harness) plugin that adds a **one-click restart** for the desktop client — a header-corner button, an HTTP endpoint, and an agent tool, all backed by the same host capability.
 
 Click once. No confirmation dialog, no second press, no console window.
-
-![The restart button in the conversation header and caption corner](docs/screenshot.png)
 
 ## Why
 
@@ -14,7 +12,7 @@ The DSH desktop app ships restart only as an official **service-only** extension
 
 | Entry point | Kind | Purpose |
 | --- | --- | --- |
-| Restart button | Client slots `conversation.session.header.utilities` (session pages) + `shell.overlay` (home page) — never displaces the panel toggle | One click → the desktop app restarts |
+| Restart button | Client slot `shell.overlay`, portaled into the host header corner (right of the native right-panel toggle) — never displaces it | One click → the desktop app restarts |
 | `POST /api/dsh-restart/restart` | HTTP route | Same operation for scripts and other plugins |
 | `GET /api/dsh-restart/status` | HTTP route | Reports the resolved desktop process and mode plan |
 | `restart_dsh_client` | Agent tool | Lets the model restart the client itself |
@@ -26,7 +24,9 @@ Two modes:
 
 ## Install
 
-The plugin is a regular DSH bundle. Point a profile at it:
+### As a regular DSH bundle
+
+Point a profile at the package directory:
 
 ```jsonc
 // <profile>/package.json
@@ -43,6 +43,13 @@ The plugin is a regular DSH bundle. Point a profile at it:
 Then restart the client once (by hand the first time — the button does not exist yet), and refresh the page after any `client.js` edit, since the desktop serves client halves from disk.
 
 Because `package.json` points `exports` at the real files and the profile links the directory, editing `client.js` is picked up on the next page load; editing `index.js` (the host half) needs a real client restart.
+
+### One-click install (Windows)
+
+`install-oneclick-restart.ps1` fetches the published package from the CDN, copies it into
+`%APPDATA%\dsh-desktop\harness\profiles\web\node_modules\dsh-restart-client`, and appends the
+`insert` entry to `cordis.patch.yml`. It verifies every file against a recorded Git blob SHA-1 and
+backs up the patch file before touching it. Idempotent — safe to re-run.
 
 ## How the no-console restart works
 
@@ -65,9 +72,11 @@ If WSH is unavailable, the plugin falls back to creating the helper directly, so
 
 ## The button
 
-It is registered in two host seats so it is always reachable, and the two never show at once. On session pages — including the blank new-session (hero) page — it lives in the conversation header utilities slot (`conversation.session.header.utilities`), just left of the header corner, in the content area below the titlebar, so it never overlaps the OS-native minimize/maximize/close buttons. On the home page (no session at all) it lives in the frame-wide `shell.overlay` layer, pinned to the right end of the home page's header row (below the titlebar) — the same visual corner as the header seat. The overlay seat hides itself (CSS `:has()` plus a DOM probe) whenever the conversation panel is not mounted (plugins / schedule / settings pages) or the header seat is rendered, so it appears only on the home page and never duplicates. The right-panel expand toggle lives in a separate, single-occupant corner slot, so it is never displaced.
+It occupies **one** seat, but shows on every page. `apply()` registers a component into the root-level slot `shell.overlay`, which exists even on the sessionless welcome screen, so the component is always mounted. The component does not render the button itself — it tracks `[data-conversation-header-corner]` with a `MutationObserver` (the host corner appears late, e.g. on the welcome screen), creates a `<span data-dshc-mount>` and appends it as the corner's **last** child, then `react-dom` `createPortal` renders the button into it.
 
-Styled as a ghost button in the shell's token language: 28px square, compact control radius, transparent until hover, `--dsw-alias-label-secondary` → `--dsw-alias-label-primary`, a 180° icon turn on hover, a spin plus a pulsing label while busy, and `--dsw-alias-state-error-primary` with a **Retry** face for six seconds if the request fails. It honors `prefers-reduced-motion`.
+Position is therefore decided entirely by host layout: the corner is pushed to the far right of the header row by the host's own `margin-left:auto`, and the plugin writes no `top`/`left` and keeps no fixed anchor. The corner is a single-occupant host slot already taken by the native right-panel toggle, so `ctx.slots` cannot register into it — which is why the plugin ports the button instead of registering a sibling.
+
+Styled as a ghost button in the shell's token language: 28px square, compact control radius, transparent until hover, `--dsw-alias-label-secondary` → `--dsw-alias-label-primary`, a gentle icon turn on hover, a spin while busy, and `--dsw-alias-state-error-primary` with a **Retry** face for six seconds if the request fails. It honors `prefers-reduced-motion`.
 
 ## API
 
@@ -115,7 +124,7 @@ The current turn is interrupted by a real restart.
 
 ```
 index.js            host half — routes, WMI/VBS launcher, agent tool
-client.js           client half — the caption corner button
+client.js           client half — the header-corner button
 cordis.patch.yml    bundle patch: inserts the plugin entry
 locale/zh.json      plugin marketplace metadata (Chinese)
 locale/en.json      plugin marketplace metadata (English)

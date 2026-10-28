@@ -1,30 +1,41 @@
 /**
  * Client half of dsh-restart-client.
  *
- * One icon-only restart control, placed in two host seats so it is always reachable:
- *  - `conversation.session.header.utilities` — the conversation header, just left of the
- *    right-panel toggle (shown on session pages, including the blank new-session hero page).
- *  - `shell.overlay` — the frame-wide floating layer, pinned to the right end of the home
- *    page's header row (below the titlebar), i.e. the same visual corner as the header seat.
+ * Mounting follows the my-corner-plugin (dsh-power-menu) corner-slot pattern:
  *
- * The two never show at once: the overlay button hides itself whenever the conversation
- * panel is not mounted (plugins/schedule/settings pages) or the header seat is rendered, so
- * it appears only on the home page. The shell's own header corner control (the right-panel
- * toggle) lives in a separate, single-occupant slot, so it is never displaced. A single
- * click restarts.
+ *  1. apply() registers CornerSlot into the root-level slot `shell.overlay`, which
+ *     exists even on the sessionless welcome screen, so the component is always mounted.
+ *  2. CornerSlot does not render the button directly. It uses a MutationObserver to
+ *     track `[data-conversation-header-corner]` — a single-occupant host slot already
+ *     taken by the native right-panel toggle, so ctx.slots cannot register into it.
+ *  3. Once found, it creates a <span data-dshc-mount> and appends it as the corner's
+ *     LAST child (i.e. to the right of the native toggle).
+ *  4. react-dom createPortal renders the restart button into that span.
  *
- * - The button is icon-only (28px square, 16px glyph, no text); the tooltip carries the
- *   accessible name.
+ *  Button position is therefore 100% decided by host layout (the corner is pushed to
+ *  the far right of the header row by the host's own margin-left:auto); the plugin
+ *  writes no top/left and keeps no fixed-position anchor. The old two-seat design
+ *  (header utilities + fixed overlay + :has() dedupe) is fully replaced by this
+ *  single seat that shows wherever the host renders the header corner.
+ *
+ *  The button itself keeps the original behaviour: icon-only 28px square, 16px glyph,
+ *  busy spinner, error face, single click restarts via POST /api/dsh-restart/restart.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-restart-client',
   factory(require) {
     const React = require('react');
     const h = React.createElement;
-    const { useState, useRef, useEffect, useCallback } = React;
+    const { useState, useRef, useEffect, useCallback, useLayoutEffect } = React;
+
+    let createPortal = null;
+    try {
+      createPortal = require('react-dom').createPortal;
+    } catch {
+      createPortal = null;
+    }
 
     const NS = 'dshRestartClient';
-    const SLOT_HEADER = 'conversation.session.header.utilities';
     const SLOT_OVERLAY = 'shell.overlay';
     const ENDPOINT = '/api/dsh-restart/restart';
     // Give the response time to reach the browser before the app is killed.
@@ -53,102 +64,34 @@ window.__ModuleLoader__.load({
       return (key) => (dict[key] !== undefined ? dict[key] : key);
     }
 
-    const CSS = `
-.dshc-seat {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  margin-left: 6px;
-}
-.dshc-anchor {
-  position: fixed;
-  right: 12px;
-  /* Below the titlebar, on the home page's header row (the sessionless header). Matches the
-     vertical band where session pages show the header seat, so it reads as the same place. */
-  top: calc(var(--dsh-windows-titlebar-height, 44px) + 8px);
-  z-index: 32;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-  -webkit-app-region: no-drag;
-}
-.dshc-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--dsw-radius-sm, 6px);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  transition: background-color 130ms ease, color 130ms ease, transform 80ms ease;
-}
-.dshc-btn:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-.dshc-btn:active:not([aria-busy="true"]) {
-  transform: scale(0.94);
-}
-.dshc-btn:focus-visible {
-  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 1px;
-}
-.dshc-icon {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  opacity: 0.8;
-  transition: transform 480ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 130ms ease;
-}
-.dshc-btn:hover .dshc-icon {
-  opacity: 1;
-  transform: scale(1.08);
-}
-.dshc-btn[data-state="busy"] {
-  cursor: progress;
-}
-.dshc-btn[data-state="busy"] .dshc-icon {
-  animation: dshc-spin 900ms linear infinite;
-  transform: none;
-  opacity: 1;
-}
-.dshc-btn[data-state="error"],
-.dshc-btn[data-state="error"]:hover {
-  color: var(--dsw-alias-state-error-primary);
-}
-.dshc-btn[data-state="error"]:hover .dshc-icon {
-  transform: none;
-}
-@keyframes dshc-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-/* Hide the overlay seat whenever the conversation panel is not mounted (plugins / schedule /
-   settings pages) or the header seat is actually rendered (session pages). Only the home page
-   shows the overlay. The JS probe mirrors this; CSS :has() provides flicker-free fallback. */
-html:not(:has([data-conversation-content])) .dshc-anchor,
-html:has([data-dshc-seat="header"]) .dshc-anchor {
-  display: none;
-}
-@media (prefers-reduced-motion: reduce) {
-  .dshc-icon { transition: none; }
-  .dshc-btn:hover .dshc-icon { transform: none; }
-  .dshc-btn[data-state="busy"] .dshc-icon { animation: none; opacity: 0.6; }
-  .dshc-btn:active:not([aria-busy="true"]) { transform: none; }
-}
-`;
+    const CSS_ID = 'dsh-restart-client-css';
+    const CSS = [
+      /* mount span inside the host header corner: inline flow, host decides position */
+      '.dshc-seat{display:inline-flex;align-items:center;flex:0 0 auto;-webkit-app-region:no-drag}',
+      '.dshc-btn{appearance:none;-webkit-appearance:none;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;margin:0;padding:0;border:0;border-radius:var(--dsw-radius-sm,6px);background:transparent;color:var(--dsw-alias-label-secondary,#5f5f66);cursor:pointer;-webkit-app-region:no-drag;transition:background-color 130ms ease,color 130ms ease,transform 80ms ease}',
+      '.dshc-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(0,0,0,.06));color:var(--dsw-alias-label-primary,#1b1b20)}',
+      '.dshc-btn:active:not([aria-busy="true"]){transform:scale(0.94)}',
+      '.dshc-btn:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary,#4d6bfe));outline-offset:1px}',
+      '.dshc-icon{display:inline-flex;flex:none;align-items:center;justify-content:center;width:16px;height:16px;opacity:0.8;transition:transform 480ms cubic-bezier(0.22,0.61,0.36,1),opacity 130ms ease}',
+      '.dshc-btn:hover .dshc-icon{opacity:1;transform:scale(1.08)}',
+      '.dshc-btn[data-state="busy"]{cursor:progress}',
+      '.dshc-btn[data-state="busy"] .dshc-icon{animation:dshc-spin 900ms linear infinite;transform:none;opacity:1}',
+      '.dshc-btn[data-state="error"],.dshc-btn[data-state="error"]:hover{color:var(--dsw-alias-state-error-primary,#e5484d)}',
+      '.dshc-btn[data-state="error"]:hover .dshc-icon{transform:none}',
+      '@keyframes dshc-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}',
+      '@media (prefers-reduced-motion:reduce){.dshc-icon{transition:none}.dshc-btn:hover .dshc-icon{transform:none}.dshc-btn[data-state="busy"] .dshc-icon{animation:none;opacity:0.6}.dshc-btn:active:not([aria-busy="true"]){transform:none}}',
+    ].join('');
+
+    function ensureCss() {
+      if (typeof document === 'undefined') return;
+      let tag = document.querySelector(`style[data-plugin-css="${CSS_ID}"]`);
+      if (tag === null) {
+        tag = document.createElement('style');
+        tag.dataset.pluginCss = CSS_ID;
+        document.head.append(tag);
+      }
+      if (tag.textContent !== CSS) tag.textContent = CSS;
+    }
 
     function Icon() {
       return h(
@@ -170,44 +113,7 @@ html:has([data-dshc-seat="header"]) .dshc-anchor {
       );
     }
 
-    /**
-     * True while the overlay seat must stay hidden. Hidden whenever:
-     *  - the conversation panel is not mounted (plugins/schedule/settings pages), or
-     *  - our header-seat button is actually rendered (session pages, including the blank
-     *    new-session hero page, where the header utilities render our button).
-     * Only the home page (conversation panel mounted, no session header) shows the overlay.
-     * Defaults to true so the overlay stays hidden until the DOM proves otherwise — no flicker.
-     */
-    function useOverlayHidden() {
-      const [hidden, setHidden] = useState(true);
-      useEffect(() => {
-        if (typeof document === 'undefined' || typeof MutationObserver !== 'function') return () => {};
-        const check = () => {
-          const inConversation = document.querySelector('[data-conversation-content]') !== null;
-          const headerSeat = document.querySelector('[data-dshc-seat="header"] .dshc-btn') !== null;
-          setHidden(!inConversation || headerSeat);
-        };
-        let frame = 0;
-        const schedule = () => {
-          if (frame !== 0) return;
-          frame = requestAnimationFrame(() => {
-            frame = 0;
-            check();
-          });
-        };
-        schedule();
-        const observer = new MutationObserver(schedule);
-        observer.observe(document.body, { childList: true, subtree: true });
-        return () => {
-          if (frame !== 0) cancelAnimationFrame(frame);
-          observer.disconnect();
-        };
-      }, []);
-      return hidden;
-    }
-
     function RestartButton(props) {
-      const seat = props.seat === 'overlay' ? 'overlay' : 'header';
       const translate = typeof props.t === 'function' ? props.t : fallbackTranslate();
       const t = useCallback(
         (key) => {
@@ -223,8 +129,7 @@ html:has([data-dshc-seat="header"]) .dshc-anchor {
       const resetTimer = useRef(null);
       const running = useRef(false);
 
-      // Hooks run unconditionally (Rules of Hooks); results are used per seat.
-      const overlayHidden = useOverlayHidden();
+      ensureCss();
 
       useEffect(
         () => () => {
@@ -283,25 +188,15 @@ html:has([data-dshc-seat="header"]) .dshc-anchor {
         void run();
       }, [run]);
 
-      // The overlay seat stays hidden while a session header is mounted (the header seat shows).
-      if (seat === 'overlay' && overlayHidden) return null;
-
       const busy = state === 'busy';
       const title = detail !== '' ? `${t('action')} - ${detail}` : t('action');
-      const wrapperClass = seat === 'overlay' ? 'dshc-anchor' : 'dshc-seat';
-      const wrapperProps =
-        seat === 'overlay'
-          ? { className: wrapperClass, key: 'wrap' }
-          : { className: wrapperClass, key: 'wrap', 'data-dshc-seat': 'header' };
 
       return h(
         'div',
-        wrapperProps,
-        h('style', { key: 'style' }, CSS),
+        { className: 'dshc-seat', 'data-dshc-seat': 'corner' },
         h(
           'button',
           {
-            key: 'button',
             type: 'button',
             className: 'dshc-btn',
             'data-state': state,
@@ -310,9 +205,66 @@ html:has([data-dshc-seat="header"]) .dshc-anchor {
             'aria-busy': busy ? 'true' : 'false',
             onClick,
           },
-          h('span', { className: 'dshc-icon', key: 'icon' }, h(Icon, null)),
+          h('span', { className: 'dshc-icon' }, h(Icon, null)),
         ),
       );
+    }
+
+    /**
+     * CornerSlot — copied from the my-corner-plugin / dsh-power-menu mounting core.
+     * Tracks [data-conversation-header-corner] with a MutationObserver (the welcome
+     * screen's corner appears late), appends our mount span as its last child, and
+     * portals the button in.
+     */
+    function CornerSlot(props) {
+      const [mount, setMount] = useState(null);
+
+      useLayoutEffect(() => {
+        let node = null;
+        let observer = null;
+        const ensure = () => {
+          const corner = document.querySelector('[data-conversation-header-corner]');
+          if (corner === null) {
+            if (node !== null) {
+              node.remove();
+              node = null;
+              setMount(null);
+            }
+            return;
+          }
+          let appended = false;
+          if (node === null) {
+            node = document.createElement('span');
+            node.setAttribute('data-dshc-mount', '');
+            node.style.cssText = 'display:inline-flex;align-items:center;margin-left:4px;';
+            setMount(node);
+            appended = true;
+          }
+          if (node.parentElement !== corner || corner.lastElementChild !== node) {
+            corner.appendChild(node);
+            appended = true;
+          }
+          if (appended) {
+            // Force a header reflow + broadcast resize once after appending; fixes the
+            // "welcome-screen icon only appears after manually resizing the window"
+            // issue (lesson from dsh-power-menu 0.1.16).
+            void corner.offsetHeight;
+            window.requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+          }
+        };
+        ensure();
+        observer = new MutationObserver(() => ensure());
+        observer.observe(document.body, { childList: true, subtree: true });
+        window.addEventListener('resize', ensure);
+        return () => {
+          observer.disconnect();
+          window.removeEventListener('resize', ensure);
+          if (node !== null) node.remove();
+        };
+      }, []);
+
+      if (mount === null || createPortal === null) return null;
+      return createPortal(h(RestartButton, props), mount);
     }
 
     return {
@@ -342,18 +294,20 @@ html:has([data-dshc-seat="header"]) .dshc-anchor {
           };
         }, 'dsh-restart-client: dictionaries');
 
-        // Header seat: conversation header utilities, just left of the right-panel toggle.
-        ctx.slots.inject(SLOT_HEADER, () =>
-          ctx.slots.register(
-            { name: SLOT_HEADER, id: 'dsh-restart-client', order: 100, label: labelText, locale: NS },
-            (props) => h(RestartButton, { ...props, seat: 'header' }),
-          ),
-        );
-        // Overlay seat: caption top-right, shown only on the home page (hides while a session is open).
+        // Single seat: root-level shell.overlay exists on every page (including the
+        // sessionless welcome screen); CornerSlot portals into the host header corner.
+        ensureCss();
         ctx.slots.inject(SLOT_OVERLAY, () =>
           ctx.slots.register(
-            { name: SLOT_OVERLAY, id: 'dsh-restart-client', order: 90, label: labelText, locale: NS },
-            (props) => h(RestartButton, { ...props, seat: 'overlay' }),
+            {
+              name: SLOT_OVERLAY,
+              id: 'dsh-restart-client',
+              order: 90,
+              label: labelText,
+              locale: NS,
+              registrant: 'dsh-restart-client',
+            },
+            (props) => h(CornerSlot, props),
           ),
         );
       },
