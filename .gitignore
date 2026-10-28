@@ -1,19 +1,17 @@
-# Dependencies
+# dependencies / build output that a DSH bundle never needs
 node_modules/
 
-# Logs and build output
-*.log
-dist/
-build/
-
-# Editor and OS noise
+# editor / OS noise
 .vscode/
 .idea/
 *.swp
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Local scratch
-*.tmp
-*.bak
+# local logs created by the restart helper
+*.log
+*.bak-*
+
+# scratch
+_*
+tmp/
